@@ -28,35 +28,39 @@ export async function GET(request: Request) {
 
     // 모든 사용자의 유효한 Score 수집
     const allValidScores = {
-      태도평가: [] as number[],  // 6개 항목의 합
-      답변평가: [] as number[]   // 답변평가 점수
+      태도평가: [] as number[],
+      답변평가: [] as number[]
     };
 
     // 모든 분석 데이터를 순회하며 Score 수집
     analyses.forEach(analysis => {
+      // analysis[analysis.uid]가 존재하는지 확인
       const interviewData = analysis[analysis.uid];
+      if (!interviewData) return;
+
       Object.values(interviewData).forEach((round: any) => {
-        if (round?.Score) {
-          // 태도평가 항목들이 모두 유효한지 확인
-          const attitudeScores = [
-            round.Score.말하기속도,
-            round.Score["추임새/침묵"],
-            round.Score.목소리변동성,
-            round.Score.표정분석,
-            round.Score.머리기울기,
-            round.Score.시선분석
-          ];
+        // round와 round.Score가 존재하는지 확인
+        if (!round?.Score) return;
 
-          // 태도평가 항목들이 모두 유효할 경우에만 합계를 추가
-          if (attitudeScores.every(score => score !== null && score !== undefined)) {
-            const attitudeSum = attitudeScores.reduce((a, b) => a + b, 0);
-            allValidScores.태도평가.push(attitudeSum);
-          }
+        // 태도평가 관련 점수들 추출
+        const attitudeScores = [
+          round.Score.말하기속도,
+          round.Score["추임새/침묵"],
+          round.Score.목소리변동성,
+          round.Score.표정분석,
+          round.Score.머리기울기,
+          round.Score.시선분석
+        ].filter(score => score !== null && score !== undefined);
 
-          // 답변평가가 유효할 경우 추가
-          if (round.Score.답변평가 !== null && round.Score.답변평가 !== undefined) {
-            allValidScores.답변평가.push(round.Score.답변평가);
-          }
+        // 태도평가: 6개 항목이 모두 있을 때만 합산
+        if (attitudeScores.length === 6) {
+          const attitudeSum = attitudeScores.reduce((a, b) => a + b, 0);
+          allValidScores.태도평가.push(attitudeSum);
+        }
+
+        // 답변평가: 값이 있을 때만 추가
+        if (round.Score?.답변평가 !== null && round.Score?.답변평가 !== undefined) {
+          allValidScores.답변평가.push(round.Score.답변평가);
         }
       });
     });
@@ -64,20 +68,19 @@ export async function GET(request: Request) {
     // 평균 계산
     const calculateAverage = (scores: number[]) => {
       if (scores.length === 0) return 0;
-      return Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
     };
-
+    
     const averages = {
       태도평가: calculateAverage(allValidScores.태도평가),
       답변평가: calculateAverage(allValidScores.답변평가),
-      총점수: calculateAverage([
+      총점수: Math.round(calculateAverage([
         ...allValidScores.태도평가,
         ...allValidScores.답변평가
-      ]) / 2  // 태도평가와 답변평가의 전체 평균
+      ]) / 2 * 10) / 10
     };
 
     return NextResponse.json(averages, { status: 200 });
-
   } catch (error) {
     console.error('Error fetching global averages:', error);
     return NextResponse.json(

@@ -661,53 +661,76 @@ export default function AnalysisResultsPage() {
     router.push("/mypage");
   };
 
-  // 성과 통계 계산
   const calculatePerformanceStats = () => {
     if (analysisResults.length === 0 || !globalAverages) return null;
   
     // 내 평균 계산
     const myAverages = analysisResults.flatMap(analysis => {
       const interviewData = analysis[analysis.uid];
+      if (!interviewData) return [];
+  
       return Object.values(interviewData)
         .filter((round: any) => round?.Score)
         .map((round: any) => {
-          const attitudeScore = [
+          // 태도평가 관련 점수들 추출
+          const attitudeScores = [
             round.Score.말하기속도,
             round.Score["추임새/침묵"],
             round.Score.목소리변동성,
             round.Score.표정분석,
             round.Score.머리기울기,
             round.Score.시선분석
-          ].reduce((a, b) => a + b, 0);
+          ].filter(score => score !== null && score !== undefined);
+  
+          // 태도평가는 6개 항목이 모두 있을 때만 합산
+          const attitudeScore = attitudeScores.length === 6 
+            ? attitudeScores.reduce((a, b) => a + b, 0)
+            : null;
+  
+          // 답변평가는 값이 있을 때만 사용
+          const answerScore = round.Score?.답변평가 !== null && round.Score?.답변평가 !== undefined 
+            ? round.Score.답변평가
+            : null;
   
           return {
             attitudeScore,
-            answerScore: round.Score.답변평가
+            answerScore
           };
-        });
+        })
+        .filter(scores => scores.attitudeScore !== null || scores.answerScore !== null);
     });
   
     const average = (scores: number[]) => 
-      Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      scores.length > 0 
+        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+        : 0;
+  
+    // 유효한 점수만 필터링하여 평균 계산
+    const validAttitudeScores = myAverages
+      .filter(score => score.attitudeScore !== null)
+      .map(score => score.attitudeScore as number);
+  
+    const validAnswerScores = myAverages
+      .filter(score => score.answerScore !== null)
+      .map(score => score.answerScore as number);
   
     const myAvg = {
-      attitudeScore: average(myAverages.map(s => s.attitudeScore)),
-      answerScore: average(myAverages.map(s => s.answerScore))
+      attitudeScore: average(validAttitudeScores),
+      answerScore: average(validAnswerScores)
     };
   
-    // globalAverages는 이미 평균값이 계산된 객체
     const performanceCategories = [
       { 
         icon: <StarOutlined />, 
         label: '태도 평가', 
         value: myAvg.attitudeScore,
-        globalValue: globalAverages.태도평가 || 0
+        globalValue: Math.round(globalAverages.태도평가 * 10) / 10 || 0
       },
       { 
         icon: <TrophyOutlined />, 
         label: '답변 평가', 
         value: myAvg.answerScore,
-        globalValue: globalAverages.답변평가 || 0
+        globalValue: Math.round(globalAverages.답변평가 * 10) / 10 || 0
       }
     ];
   
@@ -912,46 +935,50 @@ export default function AnalysisResultsPage() {
   
                     {/* 총점 섹션 */}
                     <div className="pt-4 mt-4 border-t border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-semibold text-gray-800">총점</span>
-                        <div className="flex items-center gap-6">
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <span className="text-2xl font-bold bg-clip-text text-transparent 
-                                           bg-gradient-to-r from-blue-600 to-indigo-600">
-                                {performanceStats?.reduce((acc, stat) => acc + stat.value, 0)}
-                              </span>
-                              <span className="text-sm text-gray-400 ml-1">/100</span>
-                            </div>
-                            <div className="h-8 w-px bg-gray-200" />
-                            <div className="text-right">
-                              <span className="text-xl text-gray-600">
-                                {performanceStats?.reduce((acc, stat) => acc + stat.globalValue, 0)}
-                              </span>
-                              <span className="text-sm text-gray-400 ml-1">/100</span>
-                            </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-semibold text-gray-800">총점</span>
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <span className="text-2xl font-bold bg-clip-text text-transparent 
+                                          bg-gradient-to-r from-blue-600 to-indigo-600">
+                              {performanceStats ? 
+                                Math.round((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) * 10) / 10
+                                : 0
+                              }
+                            </span>
+                            <span className="text-sm text-gray-400 ml-1">/100</span>
                           </div>
-                          <span className={`min-w-[3rem] text-right text-sm font-medium ${
+                          <div className="h-8 w-px bg-gray-200" />
+                          <div className="text-right">
+                            <span className="text-xl text-gray-600">
+                              {performanceStats ? 
+                                Math.round((performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)) * 10) / 10
+                                : 0
+                              }
+                            </span>
+                            <span className="text-sm text-gray-400 ml-1">/100</span>
+                          </div>
+                        </div>
+                        <span className={`min-w-[3rem] text-right text-sm font-medium ${
                           performanceStats ? (
-                            performanceStats.reduce((acc, stat) => acc + stat.value, 0) > 
-                            performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)
-                              ? 'text-green-500' 
+                            Math.round((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) * 10) / 10 >
+                            Math.round((performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)) * 10) / 10
+                              ? 'text-green-500'
                               : 'text-red-500'
                           ) : 'text-gray-500'
                         }`}>
                           {performanceStats && (
                             <>
-                              {performanceStats.reduce((acc, stat) => acc + stat.value, 0) > 
-                              performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0) && '+'}
-                              {(
-                                (performanceStats.reduce((acc, stat) => acc + stat.value, 0)) -
-                                (performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0))
-                              ).toFixed(1)}
+                              {Math.round((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) * 10) / 10 >
+                                Math.round((performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)) * 10) / 10 && '+'}
+                              {Math.round(((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) -
+                                (performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0))) * 10) / 10}
                             </>
                           )}
                         </span>
-                        </div>
                       </div>
+                    </div>
                     </div>
                   </div>
                 </div>
