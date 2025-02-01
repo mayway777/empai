@@ -7,7 +7,9 @@ import {
   Alert,
   Button,
   Tooltip,
-  Pagination
+  Pagination,
+  Modal,
+  message  
 } from "antd";
 import {
   ClockCircleOutlined,
@@ -18,7 +20,9 @@ import {
   RightOutlined,
   PieChartOutlined,
   StarOutlined,
-  TrophyOutlined
+  TrophyOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined
 } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import { User } from "firebase/auth";
@@ -283,6 +287,9 @@ interface AnalysisCardProps {
     } | undefined;
   };
   onCardClick: () => void;
+  onDelete: (id: string, uid: string) => void;
+  analysisId: string;  // MongoDB ID 문자열
+  uid: string;
 }
 
 const AnalysisCard: React.FC<AnalysisCardProps> = ({
@@ -290,7 +297,36 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
   time,
   videoAnalysis,
   onCardClick,
+  onDelete,
+  analysisId,
+  uid
 }) => {
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!analysisId) {
+      console.error('Invalid analysisId:', analysisId);
+      message.error('삭제할 수 없는 분석입니다.');
+      return;
+    }
+  
+    Modal.confirm({
+      title: '면접 결과 삭제',
+      icon: <ExclamationCircleOutlined />,
+      content: '이 면접 결과를 정말 삭제하시겠습니까? 삭제된 데이터는 복구할 수 없습니다.',
+      okText: '삭제',
+      okType: 'danger',
+      cancelText: '취소',
+      onOk() {
+        console.log('Deleting analysis:', {
+          analysisId: analysisId,  // $oid 값만 넘겨줌
+          uid
+        });
+        onDelete(analysisId, uid);  // analysisId.$oid 값만 넘기기
+      },
+    });
+  };
+  
   const calculateTotalScore = (roundData: any) => {
     if (!roundData?.Score) return null;
     
@@ -310,6 +346,8 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
     return Math.round(validScores.reduce((a, b) => a + b, 0));
   };
 
+
+
   return (
     <Card
       className="rounded-xl overflow-hidden transition-all duration-500 shadow-lg backdrop-blur-sm"
@@ -318,25 +356,42 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
         boxShadow: '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
       }}
     >
-      <div className="space-y-3">
-        {/* 헤더 섹션 */}
-<div className="relative px-4 pt-4 pb-2">
-  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-600 opacity-80"></div>
-  <div className="flex flex-col space-y-1">
-    <div className="flex items-center justify-between">
-      <h3 className="text-lg font-extrabold text-gray-800 tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-sky-600 to-indigo-600">
-        {title}
-      </h3>
-      <div className="flex items-center space-x-1.5 text-gray-500">
-        <ClockCircleOutlined className="text-sm opacity-70" />
-        <p className="text-xs font-medium tracking-tight">
-          {time}
-        </p>
+       {/* Delete button positioned absolutely */}
+       <Tooltip title="면접 결과 삭제" placement="left">
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined className="text-lg" />}
+          className="absolute top-0 right-0 p-3 hover:bg-red-50 z-20"
+          style={{
+            position: 'absolute',
+            width: '50px',
+            height: '50px',
+            borderRadius: '0 0 0 12px'
+          }}
+          onClick={handleDelete}
+        />
+      </Tooltip>
+
+<div className="space-y-3">
+  {/* 헤더 섹션 */}
+  <div className="relative px-4 pt-4 pb-2">
+    <div className="absolute top-0 left-4 right-4 h-1 bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-600 opacity-80"></div>
+    <div className="flex flex-col space-y-1">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-extrabold text-gray-800 tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-sky-600 to-indigo-600">
+          {title}
+        </h3>
+        <div className="flex items-center space-x-1.5 text-gray-500">
+          <ClockCircleOutlined className="text-sm opacity-70" />
+          <p className="text-xs font-medium tracking-tight">
+            {time}
+          </p>
+        </div>
       </div>
+      <div className="h-[1px] w-full bg-gradient-to-r from-sky-200/50 to-indigo-200/50 opacity-50 mt-1"></div>
     </div>
-    <div className="h-[1px] w-full bg-gradient-to-r from-sky-200/50 to-indigo-200/50 opacity-50 mt-1"></div>
   </div>
-</div>
 
         {/* 분석 상태 표시 */}
         <div className="grid grid-cols-4 gap-1.5">
@@ -487,6 +542,64 @@ export default function AnalysisResultsPage() {
   // 페이지네이션 상태
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
+  
+  const handleDeleteAnalysis = async (analysisId: string, uid: string) => {
+    if (!analysisId) {
+      message.error('유효하지 않은 분석 ID입니다.');
+      return;
+    }
+
+    try {
+      const currentUser = await getCurrentUser();
+      if (!currentUser) {
+        message.error('로그인이 필요합니다.');
+        return;
+      }
+
+      const token = await currentUser.getIdToken();
+      const response = await fetch(`/api/interview/result_request`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          analysisId,
+          uid: currentUser.uid 
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('삭제 요청 실패');
+      }
+
+      // 서버 응답이 성공일 때 UI 업데이트
+      setAnalysisResults(prevResults => {
+        const updatedResults = prevResults.filter(result => {
+          const resultId = result._id?.$oid || result._id;
+          return resultId !== analysisId;
+        });
+
+        // 현재 페이지의 아이템 수 계산
+        const currentPageItems = updatedResults.slice(
+          (currentPage - 1) * itemsPerPage,
+          currentPage * itemsPerPage
+        );
+
+        // 현재 페이지가 비어있다면 이전 페이지로 이동
+        if (currentPageItems.length === 0 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
+
+        return updatedResults;
+      });
+
+      message.success('성공적으로 삭제되었습니다!');
+    } catch (error) {
+      console.error('삭제 에러:', error);
+      message.error('삭제 중 문제가 발생했습니다.');
+    }
+};
 
   useEffect(() => {
     const fetchData = async () => {
@@ -879,21 +992,28 @@ export default function AnalysisResultsPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {paginatedResults.map((analysis) => {
-                  const uniqueKey = analysis._id?.$oid || `${analysis.uid}-${analysis.time}`;
-                  return (
-                    <AnalysisCard
-                      key={uniqueKey}
-                      title={analysis.title}
-                      time={formatDate(analysis.time)}
-                      videoAnalysis={analysis[analysis.uid]}
-                      onCardClick={() => {
-                        setSelectedAnalysis(analysis);
-                        setModalVisible(true);
-                      }}
-                    />
-                  );
-                })}
+              {paginatedResults.map((analysis) => {
+              console.log('Analysis Item:', analysis); // 전체 분석 결과 로그 출력
+              console.log('Analysis _id:', analysis._id); // _id 로그 출력
+              const analysisId = typeof analysis._id === 'object' ? analysis._id?.$oid : analysis._id;
+              const uniqueKey = analysis._id?.$oid || `${analysis.uid}-${analysis.time}`;
+              
+              return (
+                <AnalysisCard
+                  key={uniqueKey}
+                  analysisId={analysisId} // 전체 _id 객체 전달
+                  uid={analysis.uid}
+                  title={analysis.title}
+                  time={formatDate(analysis.time)}
+                  videoAnalysis={analysis[analysis.uid]}
+                  onCardClick={() => {
+                    setSelectedAnalysis(analysis);
+                    setModalVisible(true);
+                  }}
+                  onDelete={handleDeleteAnalysis}
+                />
+              );
+            })}
               </div>
   
               <div className="flex justify-center mt-8">

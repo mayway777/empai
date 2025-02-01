@@ -15,7 +15,10 @@ interface InterviewData {
   videoFiles: File[];
   generatedQuestions?: string[];
   interviewMode: 'practice' | 'mock';
-  
+  data: {
+    question: string;
+    answer: string;
+  }[];
 }
 
 interface ProgressProps {
@@ -206,14 +209,22 @@ export function InterviewProgress({ stream, interviewData,status }: ProgressProp
       setShowUploadModal(true);
       setUploadError(null);
       setUploadProgress(0);
-      
+       console.log('전체 interviewData:', interviewData);
       const formData = new FormData();
       formData.append('userUid', interviewData.userUid);
       formData.append('resumeUid', interviewData.resumeUid);
       formData.append('job_code', interviewData.job_code);
       formData.append('company', interviewData.company || ' ');
-     
       formData.append('resume_title', interviewData.resume_title);
+      
+      const interviewAnswers = interviewData.data.map(item => ({
+        question: item.question,
+        answer: item.answer
+      }));
+      console.log('정리된 데이터:', interviewAnswers);
+
+      formData.append('data', JSON.stringify(interviewAnswers));
+
       
       const timestamp = new Date().toISOString();
       formData.append('timestamp', timestamp);
@@ -802,5 +813,5 @@ export function InterviewProgress({ stream, interviewData,status }: ProgressProp
     </div>
   );
 }
-
+console.log('a')
 export default InterviewProgress;
