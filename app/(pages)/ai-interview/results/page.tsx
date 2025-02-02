@@ -1,1093 +1,192 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import {
-  Card,
-  Spin,
-  Alert,
-  Button,
-  Tooltip,
-  Pagination,
-  Modal,
-  message  
-} from "antd";
-import {
-  ClockCircleOutlined,
-  FileTextOutlined,
-  InfoCircleOutlined,
-  CheckCircleOutlined,
-  SyncOutlined,
-  RightOutlined,
-  PieChartOutlined,
-  StarOutlined,
-  TrophyOutlined,
-  DeleteOutlined,
-  ExclamationCircleOutlined
-} from "@ant-design/icons";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { User } from "firebase/auth";
 import getCurrentUser from "@/lib/firebase/auth_state_listener";
-import ResultModal from "@/app/components/interview/result";
+import { motion } from "framer-motion";
+import { 
+  RobotOutlined,
+  VideoCameraOutlined,
+  FileSearchOutlined,
+  ArrowRightOutlined 
+} from "@ant-design/icons";
+import { ConfigProvider } from "antd";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 
-
-
-
-const calculateOverallAverages = (allResults: Analysis[]) => {
-  const allScores = allResults.flatMap(analysis => {
-    const interviewData = analysis[analysis.uid];
-    return Object.values(interviewData)
-      .filter((round: any) => round?.Score && Object.values(round.Score).every(score => score !== null))
-      .map((round: any) => round.Score);
-  });
-
-  if (allScores.length === 0) return null;
-
-  const average = (arr: number[]) => 
-    Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1));
-
-  return {
-    말하기속도: average(allScores.map(s => s.말하기속도)),
-    "추임새/침묵": average(allScores.map(s => s["추임새/침묵"])),
-    목소리변동성: average(allScores.map(s => s.목소리변동성)),
-    표정분석: average(allScores.map(s => s.표정분석)),
-    머리기울기: average(allScores.map(s => s.머리기울기)),
-    시선분석: average(allScores.map(s => s.시선분석)),
-    답변평가: average(allScores.map(s => s.답변평가))
-  };
-};
-
-
-
-interface ScoreLabelInfo {
-  label: string;
-  colors: {
-    base: string;
-    light: string;
-    dark: string;
-    text: string;
-    border: string;
-    glow: string;
-    shine: string;
-    accent: string;
-  };
-}
-
-const getScoreLabelInfo = (score: number | null): ScoreLabelInfo => {
-  if (score === null) {
-    return {
-      label: "분석 대기",
-      colors: {
-        base: "#94A3B8",    // 청회색 (대기 상태 느낌)
-        light: "#F1F5F9",   // 연한 청회색 
-        dark: "#64748B",    // 어두운 청회색
-        text: "#475569",    // 고대비 텍스트
-        border: "#CBD5E1",  // 부드러운 보더
-        glow: "rgba(100, 116, 139, 0.3)", // 청회색 글로우
-        shine: "#FFFFFF",   
-        accent: "rgba(148, 163, 184, 0.4)"
-      }
-    };
-  }
-  
-  if (score >= 80) {
-    return {
-      label: "매우 우수",
-      colors: {
-        base: "#FFD700",
-        light: "#FFF7D6",
-        dark: "#B8860B",
-        text: "#B8860B",
-        border: "#FFE55C",
-        glow: "rgba(251, 191, 36, 0.5)",
-        shine: "#FFFBEB",
-        accent: "rgba(251, 191, 36, 0.5)"
-      }
-    };
-  } else if (score >= 60) {
-    return {
-      label: "우수",
-      colors: {
-        base: "#C0C0C0",
-        light: "#F8FAFC",
-        dark: "#94A3B8",
-        text: "#64748B",
-        border: "#E2E8F0",
-        glow: "rgba(203, 213, 225, 0.4)",
-        shine: "#FFFFFF",
-        accent: "rgba(148, 163, 184, 0.5)"
-      }
-    };
-  } else if (score >= 40) {
-    return {
-      label: "개선 필요",
-      colors: {
-        base: "#CD7F32",
-        light: "#E3B88F",
-        dark: "#8B4513",
-        text: "#8B4513",
-        border: "#DBA878",
-        glow: "rgba(205, 127, 50, 0.4)",
-        shine: "#F7E2D0",
-        accent: "rgba(180, 83, 9, 0.5)"
-      }
-    };
-  } else {
-    return {
-      label: "매우 미흡",
-      colors: {
-        base: "#F87171",    // 연한 코랄레드
-        light: "#FEE2E2",   // 분홍빛 연한색
-        dark: "#DC2626",    // 어두운 레드
-        text: "#B91C1C",    // 진한 레드 텍스트
-        border: "#FCA5A5",  // 부드러운 보더
-        glow: "rgba(220, 38, 38, 0.2)", // 레드 글로우
-        shine: "#FFEDED",   // 연한 분홍빛
-        accent: "rgba(220, 38, 38, 0.3)"
-      }
-    };
-  }
-};
-
-const MedalDisplay = ({ score }: { score: number | null }) => {
-  const info = getScoreLabelInfo(score);
-  
-  return (
-    <div className="group relative w-full aspect-square p-2">
-      {/* 외부 글로우 효과 */}
-      <div
-        className="absolute inset-0 rounded-full blur-2xl transition-all duration-700 opacity-50 group-hover:opacity-75"
-        style={{
-          background: `radial-gradient(circle at center, ${info.colors.glow}, transparent 70%)`
-        }}
-      />
-
-      {/* 메달 본체 컨테이너 */}
-      <div className="absolute inset-0 transform transition-all duration-500 group-hover:scale-105">
-        {/* 3D 효과를 위한 메달 테두리 */}
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: `linear-gradient(40deg, ${info.colors.dark}, ${info.colors.border}, ${info.colors.light})`,
-            transform: 'perspective(1000px) rotateX(10deg)',
-            boxShadow: `
-              0 0 20px ${info.colors.glow},
-              inset 0 0 20px ${info.colors.glow},
-              0 5px 15px rgba(0, 0, 0, 0.3)
-            `
-          }}
-        >
-          {/* 메달 내부 */}
-          <div
-            className="absolute inset-1 rounded-full overflow-hidden"
-            style={{
-              background: `radial-gradient(circle at 30% 30%, ${info.colors.light}, ${info.colors.base}, ${info.colors.dark})`,
-              border: `2px solid ${info.colors.border}`,
-            }}
-          >
-            {/* 복합적인 광택 효과 */}
-            <div className="absolute inset-0">
-              {/* 상단 하이라이트 */}
-              <div
-                className="absolute -top-1/2 left-1/2 w-full h-full -translate-x-1/2 transform rotate-[-20deg]"
-                style={{
-                  background: `linear-gradient(to bottom, ${info.colors.shine}80, transparent)`,
-                }}
-              />
-              
-              {/* 동적 반짝임 효과 */}
-              <div className="absolute inset-0">
-                <div
-                  className="absolute top-0 left-0 w-full h-full transform medal-shine"
-                  style={{
-                    background: `linear-gradient(90deg, transparent, ${info.colors.shine}40, transparent)`,
-                  }}
-                />
-                <div
-                  className="absolute top-1/4 right-1/4 w-1/2 h-1/2 rounded-full medal-pulse"
-                  style={{
-                    background: `radial-gradient(circle, ${info.colors.shine}60, transparent)`,
-                  }}
-                />
-              </div>
-
-              {/* 장식적 패턴 */}
-              <div
-                className="absolute inset-4 rounded-full border opacity-30 medal-rotate"
-                style={{ 
-                  borderColor: info.colors.shine,
-                  boxShadow: `inset 0 0 10px ${info.colors.accent}`
-                }}
-              />
-              <div
-                className="absolute inset-6 rounded-full border opacity-20 medal-rotate"
-                style={{ 
-                  borderColor: info.colors.shine,
-                  transform: 'rotate(180deg)'
-                }}
-              />
-            </div>
-
-           {/* 점수 표시 */}
-{/* 점수 표시 */}
-<div className="absolute inset-0 flex flex-col items-center justify-center z-10">
- {/* 점수 */}
- <div className="flex flex-col items-center justify-center h-full mb-1">
-   <span
-     className="text-2xl font-bold transform transition-all duration-300 group-hover:scale-105"
-     style={{
-       color: '#FFFFFF',
-       textShadow: `
-         1px 1px 2px ${info.colors.dark},
-         0 0 15px ${info.colors.glow}`,
-       letterSpacing: '0.5px'
-     }}
-   >
-     {score !== null ? `${score}점` : '-'}
-   </span>
-   {/* 라벨 */}
-   <div
-     className="px-3 py-0.5 rounded-full bg-white/95 backdrop-blur-none transform
-       transition-all duration-300 shadow-sm group-hover:scale-105"
-     style={{
-       color: info.colors.text,
-       boxShadow: `0 2px 4px ${info.colors.glow}`,
-       transform: 'scale(0.7)'  // 크기를 약간 키움
-     }}
-   >
-     <span className="font-bold text-base  whitespace-nowrap tracking-wide">
-       {info.label}
-     </span>
-   </div>
- </div>
-</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-interface AnalysisCardProps {
+interface ServiceCardProps {
   title: string;
-  time: string;
-  videoAnalysis: {
-    [key: string]: {
-      video_number: number;
-      video_filename: string;
-      question: string;
-      Score?: {
-        말하기속도: number;
-        "추임새/침묵": number;
-        목소리변동성: number;
-        표정분석: number;
-        머리기울기: number;
-        시선분석: number;
-        답변평가: number;
-      };
-      [key: string]: any;
-    } | undefined;
-  };
-  onCardClick: () => void;
-  onDelete: (id: string, uid: string) => void;
-  analysisId: string;  // MongoDB ID 문자열
-  uid: string;
+  description: string;
+  icon: React.ReactNode;
+  onClick?: () => void;
+  delay: number;
 }
 
-const AnalysisCard: React.FC<AnalysisCardProps> = ({
+const ServiceCard: React.FC<ServiceCardProps> = ({
   title,
-  time,
-  videoAnalysis,
-  onCardClick,
-  onDelete,
-  analysisId,
-  uid
+  description,
+  icon,
+  onClick,
+  delay
 }) => {
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (!analysisId) {
-      console.error('Invalid analysisId:', analysisId);
-      message.error('삭제할 수 없는 분석입니다.');
-      return;
-    }
-  
-    Modal.confirm({
-      title: '면접 결과 삭제',
-      icon: <ExclamationCircleOutlined />,
-      content: '이 면접 결과를 정말 삭제하시겠습니까? 삭제된 데이터는 복구할 수 없습니다.',
-      okText: '삭제',
-      okType: 'danger',
-      cancelText: '취소',
-      onOk() {
-        console.log('Deleting analysis:', {
-          analysisId: analysisId,  // $oid 값만 넘겨줌
-          uid
-        });
-        onDelete(analysisId, uid);  // analysisId.$oid 값만 넘기기
-      },
-    });
-  };
-  
-  const calculateTotalScore = (roundData: any) => {
-    if (!roundData?.Score) return null;
-    
-    const scores = [
-      roundData.Score.말하기속도,
-      roundData.Score["추임새/침묵"],
-      roundData.Score.목소리변동성,
-      roundData.Score.표정분석,
-      roundData.Score.머리기울기,
-      roundData.Score.시선분석,
-      roundData.Score.답변평가
-    ];
-    
-    const validScores = scores.filter(score => score !== null && !isNaN(score));
-    if (validScores.length === 0) return null;
-    
-    return Math.round(validScores.reduce((a, b) => a + b, 0));
-  };
-
-
-
   return (
-    <Card
-      className="rounded-xl overflow-hidden transition-all duration-500 shadow-lg backdrop-blur-sm"
+    <motion.div
+      onClick={onClick}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay }}
+      whileHover={{ 
+        scale: 1.05,
+        boxShadow: "0px 8px 16px rgba(0, 0, 0, 0.1), 0px 8px 16px rgba(0, 0, 0, 0.1), 0px 0px 30px rgba(75,0,130,0.2), 0px 0px 30px rgba(0,0,255,0.4)"
+      }} 
+      className="relative bg-white rounded-xl overflow-hidden cursor-pointer group transition-shadow duration-300"
       style={{
-        background: 'linear-gradient(to right, rgba(255,255,255,0.9), rgba(248,250,252,0.9))',
-        boxShadow: '0 10px 40px -10px rgba(0, 0, 0, 0.1)'
+        boxShadow: "0px 8px 16px rgba(0, 0, 0, 0.1), 0px 8px 16px rgba(0, 0, 0, 0.1), 0px 0px 30px rgba(75,0,130,0.1), 0px 0px 30px rgba(0,0,255,0.1)",
       }}
     >
-       {/* Delete button positioned absolutely */}
-       <Tooltip title="면접 결과 삭제" placement="left">
-        <Button
-          type="text"
-          danger
-          icon={<DeleteOutlined className="text-lg" />}
-          className="absolute top-0 right-0 p-3 hover:bg-red-50 z-20"
-          style={{
-            position: 'absolute',
-            width: '50px',
-            height: '50px',
-            borderRadius: '0 0 0 12px'
-          }}
-          onClick={handleDelete}
-        />
-      </Tooltip>
-
-<div className="space-y-3">
-  {/* 헤더 섹션 */}
-  <div className="relative px-4 pt-4 pb-2">
-    <div className="absolute top-0 left-4 right-4 h-1 bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-600 opacity-80"></div>
-    <div className="flex flex-col space-y-1">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-extrabold text-gray-800 tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-sky-600 to-indigo-600">
-          {title}
-        </h3>
-        <div className="flex items-center space-x-1.5 text-gray-500">
-          <ClockCircleOutlined className="text-sm opacity-70" />
-          <p className="text-xs font-medium tracking-tight">
-            {time}
-          </p>
-        </div>
-      </div>
-      <div className="h-[1px] w-full bg-gradient-to-r from-sky-200/50 to-indigo-200/50 opacity-50 mt-1"></div>
-    </div>
-  </div>
-
-        {/* 분석 상태 표시 */}
-        <div className="grid grid-cols-4 gap-1.5">
-          {Object.keys(videoAnalysis).map((key) => {
-            const roundData = videoAnalysis[key];
-            const isAnalyzed = roundData?.Score !== undefined;
-            
-            return (
-              <div 
-                key={`status-${key}`} 
-                className={`
-                  flex flex-col items-center p-2 rounded-lg
-                  transition-all duration-300 hover:scale-[1.02]
-                  ${isAnalyzed 
-                    ? 'bg-gradient-to-br from-sky-50 to-indigo-50 text-sky-600 border border-sky-100' 
-                    : 'bg-gradient-to-br from-amber-50 to-orange-50 text-amber-600 border border-amber-100'
-                  }
-                `}
-              >
-                <span className="text-xs font-semibold mb-1">질문 {key}</span>
-                <div className="flex items-center text-[10px] font-medium">
-                  {isAnalyzed ? (
-                    <>
-                      <CheckCircleOutlined className="mr-0.5 animate-fadeIn" />
-                      <span>분석완료</span>
-                    </>
-                  ) : (
-                    <>
-                      <SyncOutlined spin className="mr-0.5" />
-                      <span>분석중</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 메달 표시 섹션 */}
-        <div className="grid grid-cols-4 gap-1.5">
-          {Object.keys(videoAnalysis).map((key) => {
-            const roundData = videoAnalysis[key];
-            const totalScore = roundData ? calculateTotalScore(roundData) : null;
-            
-            return (
-              <div key={`round-${key}`}>
-                <MedalDisplay score={totalScore} />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 상세보기 버튼 */}
-        <button 
-          className="
-            w-full px-3 py-2 mt-2
-            bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500
-            text-white rounded-lg
-            transition-all duration-300
-            flex items-center justify-center
-            space-x-2 text-sm font-medium
-            group
-            relative overflow-hidden
-          "
-          onClick={(e) => {
-            e.stopPropagation();
-            onCardClick();
-          }}
+      <div className="relative p-6">
+        {/* 아이콘 */}
+        <motion.div 
+          className="h-12 w-12 text-3xl text-purple-500"
+          transition={{ duration: 0.5 }}
         >
-          <span className="relative z-10">결과 상세보기</span>
-          <RightOutlined className="relative z-10 group-hover:translate-x-1 transition-transform" />
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        </button>
+          {icon}
+        </motion.div>
+        
+        {/* 제목 및 설명 */}
+        <h3 className="text-lg font-semibold mt-4">{title}</h3>
+        <p className="text-gray-600 text-sm mt-2">{description}</p>
+        
+        {/* 살펴보기 버튼 */}
+        <motion.div
+          className="mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+        >
+          <button 
+            className="flex items-center gap-2 text-sm text-gray-900 group-hover:text-blue-500"
+            onClick={onClick}
+          >
+            살펴보기
+            <ArrowRightOutlined className="transition-transform group-hover:translate-x-1" />
+          </button>
+        </motion.div>
       </div>
-    </Card>
+    </motion.div>
   );
 };
 
-interface Analysis {
-  _id: { $oid: string };
-  uid: string;
-  self_id: string;
-  title: string;
-  job_code: string;
-  time: string;
-  [key: string]: any;
-}
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-
-  return `${year}년 ${month}월 ${day}일 ${hours}:${minutes}`;
-};
-
-
-const calculateTotalScores = (analysis: Analysis | null) => {
-  if (!analysis) return null;
-
-  const interviewData = analysis[analysis.uid];
-  const allScores = Object.values(interviewData)
-    .filter((round: any) => round?.Score)
-    .map((round: any) => {
-      const scores = [
-        round.Score.말하기속도,
-        round.Score["추임새/침묵"],
-        round.Score.목소리변동성,
-        round.Score.표정분석,
-        round.Score.머리기울기,
-        round.Score.시선분석,
-        round.Score.답변평가
-      ];
-      
-      return {
-        말하기속도: round.Score.말하기속도,
-        "추임새/침묵": round.Score["추임새/침묵"],
-        목소리변동성: round.Score.목소리변동성,
-        표정분석: round.Score.표정분석,
-        머리기울기: round.Score.머리기울기,
-        시선분석: round.Score.시선분석,
-        답변평가: round.Score.답변평가
-      };
-    });
-
-  if (allScores.length === 0) return null;
-
-  // 첫 번째 라운드의 점수를 반환 (모달에서 사용)
-  return allScores[0];
-};
-
-export default function AnalysisResultsPage() {
-  const router = useRouter();
+export default function Page() {
   const [user, setUser] = useState<User | null>(null);
-  const [analysisResults, setAnalysisResults] = useState<Analysis[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedAnalysis, setSelectedAnalysis] = useState<Analysis | null>(null);
-  const [globalAverages, setGlobalAverages] = useState<{
-    태도평가: number;
-    답변평가: number;
-    총점수: number;
-  } | null>(null);
-  // 페이지네이션 상태
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
-  
-  const handleDeleteAnalysis = async (analysisId: string, uid: string) => {
-    if (!analysisId) {
-      message.error('유효하지 않은 분석 ID입니다.');
-      return;
-    }
-
-    try {
-      const currentUser = await getCurrentUser();
-      if (!currentUser) {
-        message.error('로그인이 필요합니다.');
-        return;
-      }
-
-      const token = await currentUser.getIdToken();
-      const response = await fetch(`/api/interview/result_request`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          analysisId,
-          uid: currentUser.uid 
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('삭제 요청 실패');
-      }
-
-      // 서버 응답이 성공일 때 UI 업데이트
-      setAnalysisResults(prevResults => {
-        const updatedResults = prevResults.filter(result => {
-          const resultId = result._id?.$oid || result._id;
-          return resultId !== analysisId;
-        });
-
-        // 현재 페이지의 아이템 수 계산
-        const currentPageItems = updatedResults.slice(
-          (currentPage - 1) * itemsPerPage,
-          currentPage * itemsPerPage
-        );
-
-        // 현재 페이지가 비어있다면 이전 페이지로 이동
-        if (currentPageItems.length === 0 && currentPage > 1) {
-          setCurrentPage(currentPage - 1);
-        }
-
-        return updatedResults;
-      });
-
-      message.success('성공적으로 삭제되었습니다!');
-    } catch (error) {
-      console.error('삭제 에러:', error);
-      message.error('삭제 중 문제가 발생했습니다.');
-    }
-};
+  const router = useRouter();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-  
-        if (currentUser) {
-          const token = await currentUser.getIdToken();
-          
-          // 두 요청을 병렬로 실행
-          const [userResponse, globalResponse] = await Promise.all([
-            // 사용자의 분석 결과 가져오기
-            fetch(`/api/interview/result_request?uid=${currentUser.uid}`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            }),
-            // 전체 사용자의 평균 가져오기
-            fetch(`/api/interview/global_averages`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            })
-          ]);
-  
-          if (!userResponse.ok || !globalResponse.ok) {
-            throw new Error('분석 결과를 불러오는데 실패했습니다');
-          }
-  
-          const userData = await userResponse.json();
-          const globalData = await globalResponse.json();
-  
-          const sortedData = userData.sort((a: Analysis, b: Analysis) => 
-            new Date(b.time).getTime() - new Date(a.time).getTime()
-          );
-  
-          setAnalysisResults(sortedData);
-          setGlobalAverages(globalData);
-        }
-      } catch (err) {
-        setError("분석 결과를 불러오는데 실패했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-  
-    fetchData();
+    getCurrentUser().then((user) => {
+      setUser(user);
+    });
   }, []);
 
-  // 페이지네이션 로직
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const paginatedResults = analysisResults.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(analysisResults.length / itemsPerPage);
-
-  const handleLoginRedirect = () => {
-    router.push("/mypage");
-  };
-
-  const calculatePerformanceStats = () => {
-    if (analysisResults.length === 0 || !globalAverages) return null;
-  
-    // 내 평균 계산
-    const myAverages = analysisResults.flatMap(analysis => {
-      const interviewData = analysis[analysis.uid];
-      if (!interviewData) return [];
-  
-      return Object.values(interviewData)
-        .filter((round: any) => round?.Score)
-        .map((round: any) => {
-          // 태도평가 관련 점수들 추출
-          const attitudeScores = [
-            round.Score.말하기속도,
-            round.Score["추임새/침묵"],
-            round.Score.목소리변동성,
-            round.Score.표정분석,
-            round.Score.머리기울기,
-            round.Score.시선분석
-          ].filter(score => score !== null && score !== undefined);
-  
-          // 태도평가는 6개 항목이 모두 있을 때만 합산
-          const attitudeScore = attitudeScores.length === 6 
-            ? attitudeScores.reduce((a, b) => a + b, 0)
-            : null;
-  
-          // 답변평가는 값이 있을 때만 사용
-          const answerScore = round.Score?.답변평가 !== null && round.Score?.답변평가 !== undefined 
-            ? round.Score.답변평가
-            : null;
-  
-          return {
-            attitudeScore,
-            answerScore
-          };
-        })
-        .filter(scores => scores.attitudeScore !== null || scores.answerScore !== null);
-    });
-  
-    const average = (scores: number[]) => 
-      scores.length > 0 
-        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
-        : 0;
-  
-    // 유효한 점수만 필터링하여 평균 계산
-    const validAttitudeScores = myAverages
-      .filter(score => score.attitudeScore !== null)
-      .map(score => score.attitudeScore as number);
-  
-    const validAnswerScores = myAverages
-      .filter(score => score.answerScore !== null)
-      .map(score => score.answerScore as number);
-  
-    const myAvg = {
-      attitudeScore: average(validAttitudeScores),
-      answerScore: average(validAnswerScores)
-    };
-  
-    const performanceCategories = [
-      { 
-        icon: <StarOutlined />, 
-        label: '태도 평가', 
-        value: myAvg.attitudeScore,
-        globalValue: Math.round(globalAverages.태도평가 * 10) / 10 || 0
-      },
-      { 
-        icon: <TrophyOutlined />, 
-        label: '답변 평가', 
-        value: myAvg.answerScore,
-        globalValue: Math.round(globalAverages.답변평가 * 10) / 10 || 0
-      }
-    ];
-  
-    return performanceCategories;
-  };
-
-  const performanceStats = calculatePerformanceStats();
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Spin 
-          size="large" 
-          className="custom-spin"
-        />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex flex-col justify-center items-center min-h-screen p-6 bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="text-center bg-white p-10 rounded-2xl shadow-2xl max-w-md w-full transform transition-all hover:scale-105">
-          <ClockCircleOutlined className="text-6xl text-blue-500 mb-6 animate-pulse" />
-          <p className="text-xl text-gray-700 mb-6">
-            면접 분석 결과는 로그인 후 확인할 수 있습니다.
-          </p>
-          <Button
-            type="primary"
-            size="large"
-            onClick={handleLoginRedirect}
-            className="px-10 py-3 text-base hover:scale-105 transition-transform"
-          >
-            로그인 하러 가기
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const services = [
+    {
+      title: "AI 면접 예상질문",
+      description: "AI가 분석한 최신 면접 트렌드와 직무별 맞춤 예상 질문을 제공합니다. 취업을 준비하는 과정에서 가장 중요한 면접 준비를 도와드립니다.",
+      icon: <RobotOutlined />,
+      path: "/ai-interview/question"
+    },
+    {
+      title: "AI 모의면접",
+      description: "실제 면접과 같은 환경에서 AI 면접관과 1:1 모의면접을 진행해보세요. 답변을 녹화하고 실시간 피드백을 받을 수 있습니다.",
+      icon: <VideoCameraOutlined />,
+      path: "/ai-interview/evaluation"
+    },
+    {
+      title: "면접 결과보기",
+      description: "AI가 분석한 당신의 면접 결과를 확인하세요. 답변 내용, 목소리 톤, 표정 등을 종합적으로 분석하여 개선점을 제시합니다.",
+      icon: <FileSearchOutlined />,
+      path: "/ai-interview/results"
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 ">
-      <div className="max-w-[1420px] mx-auto px-8 space-y-4">
-        {/* 메인 대시보드 카드 */}
-        <div className="relative bg-white/80 rounded-3xl overflow-hidden backdrop-blur-md shadow-xl border border-white/50">
-          {/* 배경 효과 */}
-          <div className="absolute inset-0">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
-            <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-200/20 rounded-full blur-3xl animate-pulse" />
-            <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-200/20 rounded-full blur-3xl animate-pulse" 
-                 style={{ animationDelay: '1s' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-32 
-                           bg-gradient-to-r from-blue-300/10 via-indigo-300/10 to-purple-300/10 rotate-12 scale-150" />
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50/80 via-white/50 to-purple-50/80">
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: "#4F46E5",
+          },
+        }}
+      >
+        {/* 히어로 섹션 개선 */}
+        <div className="relative pt-20 pb-16 text-center">
+          <div className="absolute inset-0 z-0">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 backdrop-blur-[100px]" />
           </div>
-  
-          <div className="relative p-5 space-y-4">
-            {/* 상단 헤더 */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-gradient-to-br from-blue-500/10 to-purple-500/10 
-                              rounded-2xl backdrop-blur-sm border border-white/50 shadow-inner">
-                  <ClockCircleOutlined className="text-blue-600 text-3xl" />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-bold bg-clip-text text-transparent 
-                               bg-gradient-to-r from-gray-800 to-gray-600">
-                    면접 분석 대시보드
-                  </h1>
-                  <p className="text-gray-500 mt-1 flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    최근 30일 분석 결과
-                  </p>
-                </div>
-              </div>
-  
-              <Button
-                onClick={() => router.push("/ai-interview/evaluation")}
-                className="group bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-none
-                           px-6 py-5 text-base font-medium hover:shadow-lg hover:opacity-90 
-                           transition-all duration-300 rounded-xl flex items-center gap-1"
-              >
-                새 면접 시작
-                <RightOutlined className="group-hover:translate-x-1 transition-transform duration-300" />
-              </Button>
-            </div>
-  
-            {/* 메인 통계 섹션 */}
-            <div className="grid grid-cols-12 gap-4">
-              {/* 면접 횟수 카드 */}
-              <div className="col-span-12 md:col-span-4">
-                <div className="bg-gradient-to-br from-white/80 to-blue-50/80 rounded-2xl p-4 
-                              shadow-sm backdrop-blur-sm border border-white/50 
-                              hover:shadow-md transition-all duration-300
-                              group">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-700">총 면접 횟수</h3>
-                      <p className="text-sm text-gray-500">나의 성장 기록</p>
-                    </div>
-                    <div className="p-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 
-                                  rounded-xl group-hover:scale-110 transition-transform duration-300">
-                      <FileTextOutlined className="text-blue-500 text-xl" />
-                    </div>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold bg-clip-text text-transparent 
-                                  bg-gradient-to-r from-blue-600 to-indigo-600">
-                      {analysisResults.length}
-                    </span>
-                    <span className="text-gray-600">회</span>
-                  </div>
-                </div>
-              </div>
-  
-              {/* 통합 평가 점수 카드 */}
-              <div className="col-span-12 md:col-span-8">
-                <div className="bg-gradient-to-br from-white/80 to-blue-50/80 rounded-2xl p-4 
-                              shadow-sm backdrop-blur-sm border border-white/50 
-                              hover:shadow-md transition-all duration-300">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-700">평가 점수 분석</h3>
-                      <p className="text-sm text-gray-500">나의 평균 vs 전체 평균</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500" />
-                        <span className="text-sm text-gray-600">나의 점수</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-gray-400" />
-                        <span className="text-sm text-gray-600">전체 평균</span>
-                      </div>
-                    </div>
-                  </div>
-  
-                  <div className="space-y-２">
-                    {performanceStats && performanceStats.map((stat, index) => (
-                      <div key={index} className="group">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-１">
-                            <div className="p-2 bg-blue-50 rounded-lg">
-                              {stat.icon}
-                            </div>
-                            <span className="text-base font-medium text-gray-700">{stat.label}</span>
-                          </div>
-                          <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <span className="text-lg font-bold text-blue-600">{stat.value}</span>
-                                <span className="text-sm text-gray-400 ml-1">/50</span>
-                              </div>
-                              <div className="h-8 w-px bg-gray-200" />
-                              <div className="text-right">
-                                <span className="text-base text-gray-600">{stat.globalValue}</span>
-                                <span className="text-sm text-gray-400 ml-1">/50</span>
-                              </div>
-                            </div>
-                            <span className={`min-w-[3rem] text-right text-sm font-medium ${
-                              stat.value > stat.globalValue 
-                                ? 'text-green-500' 
-                                : stat.value < stat.globalValue 
-                                ? 'text-red-500' 
-                                : 'text-gray-500'
-                            }`}>
-                              {stat.value > stat.globalValue && '+'}
-                              {(stat.value - stat.globalValue).toFixed(1)}
-                            </span>
-                          </div>
-                        </div>
-  
-                        {/* 향상된 프로그레스 바 */}
-                        <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
-                          {/* 배경 애니메이션 */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50 animate-pulse" />
-                          
-                          {/* 메인 프로그레스 바 */}
-                          <div 
-                            className="absolute top-0 left-0 h-full rounded-full
-                                     transition-all duration-1000 ease-out group-hover:opacity-90
-                                     bg-gradient-to-r from-blue-500 to-indigo-500"
-                            style={{ width: `${(stat.value / 50) * 100}%` }}
-                          >
-                            {/* 반짝이는 효과 */}
-                            <div className="absolute inset-0 opacity-50 bg-gradient-to-r from-transparent 
-                                          via-white to-transparent shimmer-animation" />
-                          </div>
-  
-                          {/* 전체 평균 마커 */}
-                        <div 
-                          className="absolute top-1/2 -translate-y-1/2 h-full w-0.8 bg-blue-500 transition-all duration-1000"
-                          style={{ left: `${(stat.globalValue / 50) * 100}%` }}
-                        >
-                          {/* 펄스 이펙트 */}
-                          <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-4 bg-gray-500 rounded-full animate-ping" />
-                          {/* 마커 점 */}
-                          <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-4 bg-gray-500 rounded-full shadow-lg" />
-                        </div>
-                        </div>
-                      </div>
-                    ))}
-  
-                    {/* 총점 섹션 */}
-                    <div className="pt-4 mt-4 border-t border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-semibold text-gray-800">총점</span>
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <span className="text-2xl font-bold bg-clip-text text-transparent 
-                                          bg-gradient-to-r from-blue-600 to-indigo-600">
-                              {performanceStats ? 
-                                Math.round((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) * 10) / 10
-                                : 0
-                              }
-                            </span>
-                            <span className="text-sm text-gray-400 ml-1">/100</span>
-                          </div>
-                          <div className="h-8 w-px bg-gray-200" />
-                          <div className="text-right">
-                            <span className="text-xl text-gray-600">
-                              {performanceStats ? 
-                                Math.round((performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)) * 10) / 10
-                                : 0
-                              }
-                            </span>
-                            <span className="text-sm text-gray-400 ml-1">/100</span>
-                          </div>
-                        </div>
-                        <span className={`min-w-[3rem] text-right text-sm font-medium ${
-                          performanceStats ? (
-                            Math.round((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) * 10) / 10 >
-                            Math.round((performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)) * 10) / 10
-                              ? 'text-green-500'
-                              : 'text-red-500'
-                          ) : 'text-gray-500'
-                        }`}>
-                          {performanceStats && (
-                            <>
-                              {Math.round((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) * 10) / 10 >
-                                Math.round((performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0)) * 10) / 10 && '+'}
-                              {Math.round(((performanceStats.reduce((acc, stat) => acc + stat.value, 0)) -
-                                (performanceStats.reduce((acc, stat) => acc + stat.globalValue, 0))) * 10) / 10}
-                            </>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-  
-        {error && (
-          <Alert 
-            message="오류 발생" 
-            description={error} 
-            type="error" 
-            showIcon 
-            className="mb-6" 
-          />
-        )}
-  
-        {/* 분석 결과 리스트 섹션 */}
-        <div className="bg-white/80 rounded-3xl overflow-hidden backdrop-blur-md shadow-lg border border-white/50 p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-6">상세 분석 결과</h2>
           
-          {analysisResults.length === 0 ? (
-            <div className="text-center py-12">
-              <FileTextOutlined className="text-6xl text-gray-400 mb-6" />
-              <p className="text-xl text-gray-600 mb-6">
-                아직 분석된 면접 결과가 없습니다.
+          <div className="relative z-10 max-w-4xl mx-auto px-4">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+                AI 기반 면접 준비 플랫폼
+              </h1>
+              <p className="text-lg md:text-xl text-gray-700 leading-relaxed">
+                취업을 준비하는 모든 분들을 위한{" "}
+                <span className="text-indigo-600 font-semibold">스마트한 면접 준비 솔루션</span>
+                을 제공합니다.
               </p>
-              <Button
-                type="primary"
-                size="large"
-                onClick={() => router.push("/ai-interview")}
-                className="px-10 py-3"
-              >
-                첫 번째 면접 시작하기
-              </Button>
+              <p className="mt-4 text-gray-600">
+                AI의 힘을 빌려 예상질문을 분석하고, 모의면접을 통해 실력을 쌓아보세요.
+              </p>
+            </motion.div>
+
+            {/* 통계 섹션 추가 */}
+            <div className="grid grid-cols-3 gap-8 mt-16 max-w-3xl mx-auto">
+              {[
+                { number: "92%", label: "사용자 만족도" },
+                { number: "15,000+", label: "합격 자소서" },
+                { number: "25/1", label: "AI 지원" },
+              ].map((stat, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2 + index * 0.1 }}
+                  className="text-center"
+                >
+                  <div className="text-2xl md:text-3xl font-bold text-indigo-600">{stat.number}</div>
+                  <div className="text-sm text-gray-600 mt-1">{stat.label}</div>
+                </motion.div>
+              ))}
             </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {paginatedResults.map((analysis) => {
-              console.log('Analysis Item:', analysis); // 전체 분석 결과 로그 출력
-              console.log('Analysis _id:', analysis._id); // _id 로그 출력
-              const analysisId = typeof analysis._id === 'object' ? analysis._id?.$oid : analysis._id;
-              const uniqueKey = analysis._id?.$oid || `${analysis.uid}-${analysis.time}`;
-              
-              return (
-                <AnalysisCard
-                  key={uniqueKey}
-                  analysisId={analysisId} // 전체 _id 객체 전달
-                  uid={analysis.uid}
-                  title={analysis.title}
-                  time={formatDate(analysis.time)}
-                  videoAnalysis={analysis[analysis.uid]}
-                  onCardClick={() => {
-                    setSelectedAnalysis(analysis);
-                    setModalVisible(true);
-                  }}
-                  onDelete={handleDeleteAnalysis}
-                />
-              );
-            })}
-              </div>
-  
-              <div className="flex justify-center mt-8">
-                <Pagination
-                  current={currentPage}
-                  total={analysisResults.length}
-                  pageSize={itemsPerPage}
-                  onChange={(page) => setCurrentPage(page)}
-                  showSizeChanger={false}
-                  className="custom-pagination"
-                />
-              </div>
-            </>
-          )}
+          </div>
         </div>
-  
-        <style jsx global>{`
-      @keyframes shine {
-        from { transform: translateX(-100%) rotate(45deg); }
-        to { transform: translateX(200%) rotate(45deg); }
-      }
-      @keyframes pulse {
-        0%, 100% { transform: scale(1); opacity: 0.5; }
-        50% { transform: scale(1.05); opacity: 0.8; }
-      }
-      @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-      .medal-shine {
-        animation: shine 3s infinite linear;
-      }
-      .medal-pulse {
-        animation: pulse 2s infinite ease-in-out;
-      }
-      .medal-rotate {
-        animation: rotate 20s infinite linear;
-      }
-    `}</style>
-  
-        <ResultModal 
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          analysis={selectedAnalysis}
-          averageScores={calculateOverallAverages(analysisResults)}
-        />
-      </div>
+
+        {/* 서비스 카드 섹션 */}
+        <div className="max-w-7xl mx-auto px-4 py-16 pb-32">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl font-bold text-gray-900">주요 서비스</h2>
+            <p className="mt-4 text-gray-600">면접 준비의 모든 단계를 AI와 함께 준비하세요</p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-16">
+            {services.map((service, index) => (
+              <ServiceCard
+                key={index}
+                title={service.title}
+                description={service.description}
+                icon={service.icon}
+                onClick={() => router.push(service.path)}
+                delay={index * 0.1}
+              />
+            ))}
+          </div>
+        </div>
+      </ConfigProvider>
     </div>
   );
 }
