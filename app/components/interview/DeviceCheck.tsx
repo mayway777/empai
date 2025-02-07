@@ -123,19 +123,19 @@ const CameraGuide = ({ isFaceInFrame }: { isFaceInFrame: boolean }) => (
     <div className="absolute inset-0 pointer-events-none z-10">
       {!isFaceInFrame && (
         <div className="absolute inset-0 flex items-center justify-center">
-          {/* 프레임 크기를 w-40 h-40으로 수정 */}
-          <div className="relative w-40 h-40">
+          {/* 프레임 크기를 w-[200px] h-[200px]로 조정 */}
+          <div className="relative w-[200px] h-[200px]">
             {/* 중앙 십자 가이드 */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-[2px] h-10 bg-blue-400/50 rounded-full animate-pulse"></div>
-              <div className="absolute w-10 h-[2px] bg-blue-400/50 rounded-full animate-pulse"></div>
+              <div className="w-[2px] h-12 bg-blue-400/50 rounded-full animate-pulse"></div>
+              <div className="absolute w-12 h-[2px] bg-blue-400/50 rounded-full animate-pulse"></div>
             </div>
             {/* 외곽 프레임 */}
             <div className="absolute inset-0">
-              <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-blue-400/80"></div>
-              <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-blue-400/80"></div>
-              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-blue-400/80"></div>z
-              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-blue-400/80"></div>
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-blue-400/80"></div>
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-blue-400/80"></div>
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-blue-400/80"></div>
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-blue-400/80"></div>
             </div>
           </div>
         </div>
@@ -143,25 +143,25 @@ const CameraGuide = ({ isFaceInFrame }: { isFaceInFrame: boolean }) => (
       {/* 안내 메시지 */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 transform">
         <div className={`backdrop-blur-sm text-white px-6 py-2 rounded-full shadow-lg ${
-          isFaceInFrame 
-            ? 'bg-gradient-to-r from-green-600/90 to-emerald-600/90' 
+          isFaceInFrame
+            ? 'bg-gradient-to-r from-green-600/90 to-emerald-600/90'
             : 'bg-gradient-to-r from-blue-600/90 to-indigo-600/90'
         }`}>
           <div className="flex items-center space-x-2">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <path d="M12 16H12.01M12 8V12M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" 
+              <path d="M12 16H12.01M12 8V12M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z"
                 stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
             <span className="text-sm font-medium">
-              {isFaceInFrame 
-                ? '얼굴이 프레임에 잘 맞았습니다' 
+              {isFaceInFrame
+                ? '얼굴이 프레임에 잘 맞았습니다'
                 : '얼굴을 프레임 안에 맞춰주세요'}
             </span>
           </div>
         </div>
       </div>
     </div>
-);
+ );
 
 export function DeviceCheck({ user, stream, setStream, onComplete }: DeviceCheckProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -256,8 +256,8 @@ useEffect(() => {
               Math.abs(faceCenterY - screenCenterY) < centerThreshold;
       
             // 크기 체크 (화면의 15~30%로 축소)
-            const minSize = Math.min(videoWidth, videoHeight) * 0.22;
-            const maxSize = Math.min(videoWidth, videoHeight) * 0.38;
+            const minSize = Math.min(videoWidth, videoHeight) * 0.25;
+            const maxSize = Math.min(videoWidth, videoHeight) * 0.42;
             const isGoodSize = 
               faceWidth > minSize && faceWidth < maxSize &&
               faceHeight > minSize && faceHeight < maxSize;
